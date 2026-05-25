@@ -57,7 +57,7 @@ async function run() {
     const bookingCollection = db.collection("bookings");
 
     // user bookings
-    app.post("/booking", async (req, res) => {
+    app.post("/booking", verifyToken, async (req, res) => {
       const bookingData = req.body;
 
       const updateResult = await tutorCollection.updateOne(
@@ -83,14 +83,14 @@ async function run() {
     });
 
     // My bookings
-    app.get("/booking/:userId", async (req, res) => {
+    app.get("/booking/:userId", verifyToken, async (req, res) => {
       const { userId } = req.params;
       const result = await bookingCollection.find({ userId: userId }).toArray();
       res.json(result);
     });
 
     // Delete Bookings
-    app.delete("/booking/:bookingId", async (req, res) => {
+    app.delete("/booking/:bookingId", verifyToken, async (req, res) => {
       const { bookingId } = req.params;
 
       const booking = await bookingCollection.findOne({
