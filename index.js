@@ -96,6 +96,12 @@ async function run() {
 
       res.json(result);
     });
+    // My tutors
+    app.get("/my-tutors/:userId",async(req,res) =>{
+      const {userId} = req.params;
+      const result = await tutorCollection.find({userId:userId}).toArray()
+      res.json(result)
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
