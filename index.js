@@ -10,6 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 const { MongoClient, ServerApiVersion, ObjectId, BSON } = require("mongodb");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 dotenv.config();
 
 const uri = process.env.MONGODB_URI;
@@ -22,6 +23,29 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+const  JWKS = createRemoteJWKSet(
+  new URL("http://localhost:3000/api/auth/jwks")
+)
+const verifyToken = async (req,res,next) => {
+  const authHeader = req?.headers.authorization
+  if(!authHeader){
+    return res.status(401).json({message: "Unauthorized"})
+  }
+  const token = authHeader.split(" ")[1];
+  if(!token){
+    return res.status(401).json({message: "Unauthorized"})
+  }
+  
+  try{
+    const {payload} = await jwtVerify(token,JWKS)
+  
+    console.log(payload);
+    next()
+  }catch (error) {
+return res.status(403).json({message: "Forbidden"})
+  }
+ 
+}
 
 async function run() {
   try {
@@ -32,29 +56,62 @@ async function run() {
     const tutorCollection = db.collection("tutors");
     const bookingCollection = db.collection("bookings");
 
-
     // user bookings
-    app.post("/booking",async(req,res)=>{
-      const bookingData = req.body
-      const result = await bookingCollection.insertOne(bookingData)
+    app.post("/booking", async (req, res) => {
+      const bookingData = req.body;
 
-      res.json(result)
-    })
+      const updateResult = await tutorCollection.updateOne(
+        {
+          _id: new ObjectId(bookingData.tutorId),
+          totalSlots: { $gt: 0 },
+        },
+        {
+          $inc: { totalSlots: -1 },
+        },
+      );
+
+      if (updateResult.modifiedCount === 0) {
+        return res.status(400).json({ message: "No slots available" });
+      }
+
+      const bookingResult = await bookingCollection.insertOne(bookingData);
+
+      res.json({
+        success: true,
+        bookingResult,
+      });
+    });
 
     // My bookings
-    app.get("/booking/:userId",async(req,res)=>{
-      const {userId} = req.params
-      const result = await bookingCollection.find({userId:userId}).toArray();
-      res.json(result)
-    })
+    app.get("/booking/:userId", async (req, res) => {
+      const { userId } = req.params;
+      const result = await bookingCollection.find({ userId: userId }).toArray();
+      res.json(result);
+    });
 
     // Delete Bookings
-    app.delete('/booking/:bookingId',async(req,res)=>{
-      const {bookingId} = req.params
-      const result = await bookingCollection.deleteOne({_id:new ObjectId(bookingId)})
+    app.delete("/booking/:bookingId", async (req, res) => {
+      const { bookingId } = req.params;
 
-      res.json(result)
-    })
+      const booking = await bookingCollection.findOne({
+        _id: new ObjectId(bookingId),
+      });
+
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+
+      const result = await bookingCollection.deleteOne({
+        _id: new ObjectId(bookingId),
+      });
+
+      await tutorCollection.updateOne(
+        { _id: new ObjectId(booking.tutorId) },
+        { $inc: { totalSlots: 1 } },
+      );
+
+      res.json(result);
+    });
 
     // Tutors
     app.get("/tutor/all", async (req, res) => {
@@ -82,12 +139,12 @@ async function run() {
     });
 
     // Tutors Details Page
-    app.get("/tutor/:id",async(req,res)=>{
-      const {id} = req.params
+    app.get("/tutor/:id", verifyToken,  async (req, res) => {
+      const { id } = req.params;
 
-      const result = await tutorCollection.findOne({_id: new ObjectId(id)})
-      res.json(result)
-    })
+      const result = await tutorCollection.findOne({ _id: new ObjectId(id) });
+      res.json(result);
+    });
 
     // Add tutor
     app.post("/tutor", async (req, res) => {
@@ -97,12 +154,33 @@ async function run() {
       res.json(result);
     });
     // My tutors
-    app.get("/my-tutors/:userId",async(req,res) =>{
-      const {userId} = req.params;
-      const result = await tutorCollection.find({userId:userId}).toArray()
-      res.json(result)
-    })
+    app.get("/my-tutors/:userId", async (req, res) => {
+      const { userId } = req.params;
+      const result = await tutorCollection.find({ userId: userId }).toArray();
+      res.json(result);
+    });
 
+    // Delete Tutors
+    app.delete("/tutor/:id", async (req, res) => {
+      const { id } = req.params;
+      const result = await tutorCollection.deleteOne({ _id: new ObjectId(id) });
+      res.json(result);
+    });
+
+    // Edit Tutors
+    app.patch("/tutor/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedData = req.body;
+
+      const result = await tutorCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: updatedData,
+        },
+      );
+
+      res.json(result);
+    });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
