@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId, BSON } = require("mongodb");
 dotenv.config();
 
 const uri = process.env.MONGODB_URI;
@@ -30,6 +30,17 @@ async function run() {
 
     const db = client.db("mediqueue");
     const tutorCollection = db.collection("tutors");
+    const bookingCollection = db.collection("bookings");
+
+
+    // user bookings
+    app.post("/booking",async(req,res)=>{
+      const bookingData = req.body
+      const result = await bookingCollection.insertOne(bookingData)
+
+      res.json(result)
+    })
+
 
     // Tutors
     app.get("/tutor/all", async (req, res) => {
@@ -55,6 +66,14 @@ async function run() {
 
       res.json(result);
     });
+
+    // Tutors Details Page
+    app.get("/tutor/:id",async(req,res)=>{
+      const {id} = req.params
+
+      const result = await tutorCollection.findOne({_id: new ObjectId(id)})
+      res.json(result)
+    })
 
     // Add tutor
     app.post("/tutor", async (req, res) => {
