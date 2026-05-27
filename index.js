@@ -139,7 +139,7 @@ async function run() {
     });
 
     // Tutors Details Page
-    app.get("/tutor/:id", verifyToken,  async (req, res) => {
+    app.get("/tutor/:id",  async (req, res) => {
       const { id } = req.params;
 
       const result = await tutorCollection.findOne({ _id: new ObjectId(id) });
